@@ -45,9 +45,9 @@ func (c *Client) GetSensors(ctx context.Context, filterOptions ...SensorFilterOp
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.sdrToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr)
 		if err != nil {
-			return nil, fmt.Errorf("sdrToSensor failed, err: %w", err)
+			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
 
 		var choose bool = true
@@ -83,9 +83,9 @@ func (c *Client) GetSensorsAny(ctx context.Context, filterOptions ...SensorFilte
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.sdrToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr)
 		if err != nil {
-			return nil, fmt.Errorf("sdrToSensor failed, err: %w", err)
+			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
 
 		var choose bool = false
@@ -111,7 +111,7 @@ func (c *Client) GetSensorByID(ctx context.Context, sensorNumber uint8) (*Sensor
 		return nil, fmt.Errorf("GetSDRBySensorID failed, err: %w", err)
 	}
 
-	sensor, err := c.sdrToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -126,7 +126,7 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*Senso
 		return nil, fmt.Errorf("GetSDRBySensorName failed, err: %w", err)
 	}
 
-	sensor, err := c.sdrToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -134,12 +134,12 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*Senso
 	return sensor, nil
 }
 
-// sdrToSensor convert SDR record to Sensor struct.
+// SDRToSensor convert SDR record to Sensor struct.
 //
 // Only Full and Compact SDR records are meaningful here. Pass SDRs with other record types will return error.
 //
 // This function will fetch other sensor-related values which are not stored in SDR by other IPMI commands.
-func (c *Client) sdrToSensor(ctx context.Context, sdr *SDR) (*Sensor, error) {
+func (c *Client) SDRToSensor(ctx context.Context, sdr *SDR) (*Sensor, error) {
 	if sdr == nil {
 		return nil, fmt.Errorf("nil sdr parameter")
 	}
