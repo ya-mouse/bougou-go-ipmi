@@ -165,7 +165,7 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("canceled from caller")
+		return nil, ctx.Err()
 	case err := <-doneChan:
 		if err != nil {
 			return nil, err
