@@ -44,9 +44,11 @@ type Client struct {
 	// this flags controls which IPMI version (1.5 or 2.0) be used by Client to send Request
 	v20 bool
 
-	udpClient  *UDPClient
-	timeout    time.Duration
-	bufferSize int
+	udpClient     *UDPClient
+	timeout       time.Duration
+	bufferSize    int
+	retries       int
+	retryInterval time.Duration
 
 	l sync.Mutex
 
@@ -59,9 +61,11 @@ func NewOpenClient() (*Client, error) {
 	myAddr := BMC_SA
 
 	return &Client{
-		Interface:  "open",
-		timeout:    time.Second * time.Duration(DefaultExchangeTimeoutSec),
-		bufferSize: DefaultBufferSize,
+		Interface:     "open",
+		timeout:       time.Second * time.Duration(DefaultExchangeTimeoutSec),
+		bufferSize:    DefaultBufferSize,
+		retries:       0,
+		retryInterval: 0,
 
 		openipmi: &openipmi{
 			myAddr:     myAddr,
@@ -93,9 +97,11 @@ func NewClient(host string, port int, user string, pass string) (*Client, error)
 		Password:  pass,
 		Interface: InterfaceLanplus,
 
-		v20:        true,
-		timeout:    time.Second * time.Duration(DefaultExchangeTimeoutSec),
-		bufferSize: DefaultBufferSize,
+		v20:           true,
+		timeout:       time.Second * time.Duration(DefaultExchangeTimeoutSec),
+		bufferSize:    DefaultBufferSize,
+		retries:       0,
+		retryInterval: 0,
 
 		maxPrivilegeLevel: PrivilegeLevelUnspecified,
 
@@ -120,10 +126,12 @@ func NewClient(host string, port int, user string, pass string) (*Client, error)
 	}
 
 	c.udpClient = &UDPClient{
-		Host:       host,
-		Port:       port,
-		timeout:    c.timeout,
-		bufferSize: c.bufferSize,
+		Host:          host,
+		Port:          port,
+		timeout:       c.timeout,
+		bufferSize:    c.bufferSize,
+		retries:       c.retries,
+		retryInterval: c.retryInterval,
 	}
 
 	return c, nil
@@ -142,6 +150,16 @@ func (c *Client) WithDebug(debug bool) *Client {
 func (c *Client) WithUDPProxy(proxy proxy.Dialer) *Client {
 	if c.udpClient != nil {
 		c.udpClient.SetProxy(proxy)
+	}
+	return c
+}
+
+func (c *Client) WithRetries(retries int, retryInterval time.Duration) *Client {
+	c.retries = retries
+	c.retryInterval = retryInterval
+
+	if c.udpClient != nil {
+		c.udpClient.SetRetries(retries, retryInterval)
 	}
 	return c
 }

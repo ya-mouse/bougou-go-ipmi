@@ -19,9 +19,11 @@ type UDPClient struct {
 	// Target Port
 	Port int
 
-	proxy      proxy.Dialer
-	timeout    time.Duration
-	bufferSize int
+	proxy         proxy.Dialer
+	timeout       time.Duration
+	bufferSize    int
+	retries       int
+	retryInterval time.Duration
 
 	conn net.Conn
 
@@ -80,6 +82,13 @@ func (c *UDPClient) SetBufferSize(bufferSize int) *UDPClient {
 	return c
 }
 
+// SetRetries sets the number of retries in case of timeout errors.
+func (c *UDPClient) SetRetries(retries int, retryInterval time.Duration) *UDPClient {
+	c.retries = retries
+	c.retryInterval = retryInterval
+	return c
+}
+
 // RemoteIP returns the parsed ip address of the target.
 func (c *UDPClient) RemoteIP() string {
 	if net.ParseIP(c.Host) == nil {
@@ -127,50 +136,70 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	recvBuffer := make([]byte, c.bufferSize)
+	var lastErr error
+	attempts := c.retries + 1 // initial try plus retries
+	for attempt := 1; attempt <= attempts; attempt += 1 {
+		recvBuffer := make([]byte, c.bufferSize)
 
-	doneChan := make(chan error, 1)
-	// recvChan stores the integer number which indicates how many bytes
-	recvChan := make(chan int, 1)
-	go func() {
-		// It is possible that this action blocks, although this
-		// should only occur in very resource-intensive situations:
-		// - when you've filled up the socket buffer and the OS
-		//   can't dequeue the queue fast enough.
-		_, err := io.Copy(c.conn, reader)
-		if err != nil {
-			doneChan <- fmt.Errorf("write to conn failed, err: %w", err)
-			return
-		}
+		doneChan := make(chan error, 1)
+		// recvChan stores the integer number which indicates how many bytes
+		recvChan := make(chan int, 1)
+		go func() {
+			// It is possible that this action blocks, although this
+			// should only occur in very resource-intensive situations:
+			// - when you've filled up the socket buffer and the OS
+			//   can't dequeue the queue fast enough.
+			_, err := io.Copy(c.conn, reader)
+			if err != nil {
+				doneChan <- fmt.Errorf("write to conn failed, err: %w", err)
+				return
+			}
 
-		// Set a deadline for the Read operation so that we don't
-		// wait forever for a server that might not respond on
-		// a reasonable amount of time.
-		deadline := time.Now().Add(c.timeout)
-		err = c.conn.SetReadDeadline(deadline)
-		if err != nil {
-			doneChan <- fmt.Errorf("set conn read deadline failed, err: %w", err)
-			return
-		}
+			// Set a deadline for the Read operation so that we don't
+			// wait forever for a server that might not respond on
+			// a reasonable amount of time.
+			deadline := time.Now().Add(c.timeout)
+			err = c.conn.SetReadDeadline(deadline)
+			if err != nil {
+				doneChan <- fmt.Errorf("set conn read deadline failed, err: %w", err)
+				return
+			}
 
-		nRead, err := c.conn.Read(recvBuffer)
-		if err != nil {
-			doneChan <- fmt.Errorf("read from conn failed, err: %w", err)
-			return
-		}
+			nRead, err := c.conn.Read(recvBuffer)
+			if err != nil {
+				doneChan <- fmt.Errorf("read from conn failed, err: %w", err)
+				return
+			}
 
-		doneChan <- nil
-		recvChan <- nRead
-	}()
+			doneChan <- nil
+			recvChan <- nRead
+		}()
 
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case err := <-doneChan:
-		if err != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case err := <-doneChan:
+			// If no error, then retrieve the count and return data.
+			if err == nil {
+				recvCount := <-recvChan
+				return recvBuffer[:recvCount], nil
+			}
+
+			// Check if the error is a timeout.
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				lastErr = err
+				// If there are remaining attempts, log and retry.
+				if attempt < attempts {
+					// fmt.Printf("Attempt %d/%d: timeout error: %v. Retrying...\n", attempt, attempts, err)
+					time.Sleep(c.retryInterval)
+					continue
+				}
+			}
+
+			// For non-timeout errors or final timeout error, return.
 			return nil, err
 		}
-		recvCount := <-recvChan
-		return recvBuffer[:recvCount], nil
 	}
+
+	return nil, lastErr
 }
