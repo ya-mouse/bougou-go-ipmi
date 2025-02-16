@@ -45,7 +45,7 @@ func (c *Client) GetSensors(ctx context.Context, filterOptions ...SensorFilterOp
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.SDRToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr, false)
 		if err != nil {
 			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
@@ -83,7 +83,7 @@ func (c *Client) GetSensorsAny(ctx context.Context, filterOptions ...SensorFilte
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.SDRToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr, false)
 		if err != nil {
 			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
@@ -111,7 +111,7 @@ func (c *Client) GetSensorByID(ctx context.Context, sensorNumber uint8) (*Sensor
 		return nil, fmt.Errorf("GetSDRBySensorID failed, err: %w", err)
 	}
 
-	sensor, err := c.SDRToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr, false)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -126,7 +126,7 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*Senso
 		return nil, fmt.Errorf("GetSDRBySensorName failed, err: %w", err)
 	}
 
-	sensor, err := c.SDRToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr, false)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -139,7 +139,7 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*Senso
 // Only Full and Compact SDR records are meaningful here. Pass SDRs with other record types will return error.
 //
 // This function will fetch other sensor-related values which are not stored in SDR by other IPMI commands.
-func (c *Client) SDRToSensor(ctx context.Context, sdr *SDR) (*Sensor, error) {
+func (c *Client) SDRToSensor(ctx context.Context, sdr *SDR, forceScanningDisabled bool) (*Sensor, error) {
 	if sdr == nil {
 		return nil, fmt.Errorf("nil sdr parameter")
 	}
@@ -187,7 +187,7 @@ func (c *Client) SDRToSensor(ctx context.Context, sdr *SDR) (*Sensor, error) {
 	}
 
 	// scanningDisabled is filled/set by fillSensorReading
-	if sensor.scanningDisabled {
+	if sensor.scanningDisabled || forceScanningDisabled {
 		// Sensor scanning disabled, no need to continue
 		c.Debug(fmt.Sprintf(":( Sensor [%s](%#02x) scanning disabled\n", sensor.Name, sensor.Number), "")
 		return sensor, nil
