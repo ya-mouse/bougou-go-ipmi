@@ -2,6 +2,7 @@ package ipmi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -186,7 +187,8 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 			}
 
 			// Check if the error is a timeout.
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			var netErr *net.OpError
+			if errors.As(err, &netErr) && netErr.Timeout() {
 				lastErr = err
 				// If there are remaining attempts, log and retry.
 				if attempt < attempts {
