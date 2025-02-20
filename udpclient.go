@@ -178,7 +178,7 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, context.Cause(ctx)
 		case err := <-doneChan:
 			// If no error, then retrieve the count and return data.
 			if err == nil {

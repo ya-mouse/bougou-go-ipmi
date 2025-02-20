@@ -116,8 +116,8 @@ func (req *IPMIRequest) ComputeChecksum() {
 }
 
 func (res *IPMIResponse) Unpack(msg []byte) error {
-	if len(msg) < 8 {
-		return ErrUnpackedDataTooShortWith(len(msg), 8)
+	if len(msg) < 7 {
+		return ErrUnpackedDataTooShortWith(len(msg), 7)
 	}
 
 	res.RequesterAddr, _, _ = unpackUint8(msg, 0)
@@ -135,6 +135,11 @@ func (res *IPMIResponse) Unpack(msg []byte) error {
 
 	res.Command, _, _ = unpackUint8(msg, 5)
 	res.CompletionCode, _, _ = unpackUint8(msg, 6)
+
+	if len(msg) == 7 {
+		// Response with only Completion Code
+		return nil
+	}
 
 	dataLen := len(msg) - 7 - 1
 	res.Data, _, _ = unpackBytes(msg, 7, dataLen)
