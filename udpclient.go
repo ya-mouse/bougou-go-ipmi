@@ -146,6 +146,10 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 		// recvChan stores the integer number which indicates how many bytes
 		recvChan := make(chan int, 1)
 		go func() {
+			if c.conn == nil {
+				doneChan <- fmt.Errorf("write to conn failed (1), c.conn is nil")
+				return
+			}
 			// It is possible that this action blocks, although this
 			// should only occur in very resource-intensive situations:
 			// - when you've filled up the socket buffer and the OS
@@ -156,6 +160,11 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 				return
 			}
 
+			if c.conn == nil {
+				doneChan <- fmt.Errorf("write to conn failed (2), c.conn is nil")
+				return
+			}
+
 			// Set a deadline for the Read operation so that we don't
 			// wait forever for a server that might not respond on
 			// a reasonable amount of time.
@@ -163,6 +172,11 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 			err = c.conn.SetReadDeadline(deadline)
 			if err != nil {
 				doneChan <- fmt.Errorf("set conn read deadline failed, err: %w", err)
+				return
+			}
+
+			if c.conn == nil {
+				doneChan <- fmt.Errorf("write to conn failed (3), c.conn is nil")
 				return
 			}
 

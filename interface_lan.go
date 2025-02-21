@@ -310,7 +310,12 @@ func (c *Client) ConnectAuto(ctx context.Context) error {
 // closeLAN closes session used in LAN communication.
 func (c *Client) closeLAN(ctx context.Context) error {
 	// close the channel to notify the keepAliveSession goroutine to stop
-	close(c.closedCh)
+	select {
+	case <-c.closedCh:
+		// Channel is already closed
+	default:
+		close(c.closedCh)
+	}
 
 	var sessionID uint32
 	if c.v20 {
