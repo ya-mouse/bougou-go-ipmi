@@ -102,7 +102,7 @@ func (c *UDPClient) RemoteIP() string {
 }
 
 func (c *UDPClient) LocalIPPort() (string, int) {
-	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", c.Host, c.Port))
+	conn, err := net.Dial("udp", net.JoinHostPort(c.Host, strconv.Itoa(c.Port)))
 	if err != nil {
 		return "", 0
 	}
@@ -146,22 +146,18 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 		// recvChan stores the integer number which indicates how many bytes
 		recvChan := make(chan int, 1)
 		go func() {
-			if c.conn == nil {
-				doneChan <- fmt.Errorf("write to conn failed (1), c.conn is nil")
+			conn := c.conn
+			if conn == nil {
+				doneChan <- fmt.Errorf("write to conn failed, c.conn is nil")
 				return
 			}
 			// It is possible that this action blocks, although this
 			// should only occur in very resource-intensive situations:
 			// - when you've filled up the socket buffer and the OS
 			//   can't dequeue the queue fast enough.
-			_, err := io.Copy(c.conn, reader)
+			_, err := io.Copy(conn, reader)
 			if err != nil {
 				doneChan <- fmt.Errorf("write to conn failed, err: %w", err)
-				return
-			}
-
-			if c.conn == nil {
-				doneChan <- fmt.Errorf("write to conn failed (2), c.conn is nil")
 				return
 			}
 
@@ -169,18 +165,13 @@ func (c *UDPClient) Exchange(ctx context.Context, reader io.Reader) ([]byte, err
 			// wait forever for a server that might not respond on
 			// a reasonable amount of time.
 			deadline := time.Now().Add(c.timeout)
-			err = c.conn.SetReadDeadline(deadline)
+			err = conn.SetReadDeadline(deadline)
 			if err != nil {
 				doneChan <- fmt.Errorf("set conn read deadline failed, err: %w", err)
 				return
 			}
 
-			if c.conn == nil {
-				doneChan <- fmt.Errorf("write to conn failed (3), c.conn is nil")
-				return
-			}
-
-			nRead, err := c.conn.Read(recvBuffer)
+			nRead, err := conn.Read(recvBuffer)
 			if err != nil {
 				doneChan <- fmt.Errorf("read from conn failed, err: %w", err)
 				return
