@@ -84,6 +84,12 @@ type Client struct {
 	// A value of 0 means no retries (only one attempt), 1 means one retry (two attempts total), etc.
 	retryCount int
 
+	// retryInterval is the delay between retry attempts for the lan/lanplus
+	// interface. Zero means retry immediately (the upstream WithRetry
+	// behavior). Set through WithRetries, the fork-compatible API used by
+	// ipmi-collector.
+	retryInterval time.Duration
+
 	l sync.Mutex
 
 	// lanExchange serializes packet construction through response parsing. It is
@@ -229,6 +235,16 @@ func (c *Client) WithTimeout(timeout time.Duration) *Client {
 
 func (c *Client) WithRetry(retryCount int) *Client {
 	c.retryCount = retryCount
+	return c
+}
+
+// WithRetries is the fork-compatible retry API: it sets the retry count and
+// the interval slept between retryable LAN exchanges. Unlike WithRetry, which
+// keeps the upstream zero-interval behavior, WithRetries preserves the
+// api/ipmi-collector contract (WithRetries(n, d)).
+func (c *Client) WithRetries(retries int, retryInterval time.Duration) *Client {
+	c.retryCount = retries
+	c.retryInterval = retryInterval
 	return c
 }
 

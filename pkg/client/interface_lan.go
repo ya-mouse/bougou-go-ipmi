@@ -243,11 +243,17 @@ func (c *Client) exchangeLAN(ctx context.Context, request types.Request, respons
 		// Retry when no datagram matched the pending IPMI request (stray SOL/async) or on UDP read timeout.
 		if errors.Is(err, errNoDatagramMatched) {
 			c.DebugfRed("udp exchange: no matching IPMI response (want seq %#02x cmd %#02x), retry\n", wantSeq, wantCmd)
+			if werr := c.waitRetryInterval(ctx, attempt, attempts); werr != nil {
+				return wrapExchangeLANError(attempts, applyIPMIMatch, wantSeq, wantCmd, werr)
+			}
 			continue
 		}
 		var netErr *net.OpError
 		if errors.As(err, &netErr) && netErr.Timeout() {
 			c.DebugfRed("udp exchange failed, timeout error: %v\n", err)
+			if werr := c.waitRetryInterval(ctx, attempt, attempts); werr != nil {
+				return wrapExchangeLANError(attempts, applyIPMIMatch, wantSeq, wantCmd, werr)
+			}
 			continue
 		}
 
@@ -268,6 +274,24 @@ func (c *Client) exchangeLAN(ctx context.Context, request types.Request, respons
 
 	c.Debug("<< Command Response", response)
 	return nil
+}
+
+// waitRetryInterval sleeps the configured fork retry interval before the
+// next attempt. It is a no-op when no interval is configured or when the
+// failed attempt was the last one; a cancelled context returns its error so
+// the caller stops immediately.
+func (c *Client) waitRetryInterval(ctx context.Context, attempt, attempts int) error {
+	if c.retryInterval <= 0 || attempt >= attempts {
+		return nil
+	}
+	timer := time.NewTimer(c.retryInterval)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // wrapExchangeLANError maps the last UDP-layer error to a user-facing IPMI LAN message while
