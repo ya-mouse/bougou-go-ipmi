@@ -244,7 +244,7 @@ func (c *Client) exchangeLAN(ctx context.Context, request types.Request, respons
 		if errors.Is(err, errNoDatagramMatched) {
 			c.DebugfRed("udp exchange: no matching IPMI response (want seq %#02x cmd %#02x), retry\n", wantSeq, wantCmd)
 			if werr := c.waitRetryInterval(ctx, attempt, attempts); werr != nil {
-				return wrapExchangeLANError(attempts, applyIPMIMatch, wantSeq, wantCmd, werr)
+				return wrapExchangeLANError(attempt, applyIPMIMatch, wantSeq, wantCmd, werr)
 			}
 			continue
 		}
@@ -252,7 +252,7 @@ func (c *Client) exchangeLAN(ctx context.Context, request types.Request, respons
 		if errors.As(err, &netErr) && netErr.Timeout() {
 			c.DebugfRed("udp exchange failed, timeout error: %v\n", err)
 			if werr := c.waitRetryInterval(ctx, attempt, attempts); werr != nil {
-				return wrapExchangeLANError(attempts, applyIPMIMatch, wantSeq, wantCmd, werr)
+				return wrapExchangeLANError(attempt, applyIPMIMatch, wantSeq, wantCmd, werr)
 			}
 			continue
 		}
@@ -290,7 +290,12 @@ func (c *Client) waitRetryInterval(ctx context.Context, attempt, attempts int) e
 	case <-timer.C:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		// Preserve the cancellation CAUSE, not just context.Canceled: Close
+		// cancels the exchange context with net.ErrClosed, and callers rely
+		// on errors.Is(err, net.ErrClosed) to distinguish a clean shutdown
+		// from a caller-side cancel (the same contract as every other
+		// cancelled exchange path).
+		return udpExchangeError(ctx, ctx.Err())
 	}
 }
 

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 )
@@ -51,6 +52,41 @@ func TestWaitRetryIntervalNoopOnLastAttemptOrZeroInterval(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("last attempt slept for %v", elapsed)
+	}
+}
+
+func TestWaitRetryIntervalSleepsConfiguredInterval(t *testing.T) {
+	c, err := NewClient("127.0.0.1", 623, "user", "pass")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retryInterval = 40 * time.Millisecond
+
+	start := time.Now()
+	if err := c.waitRetryInterval(context.Background(), 1, 3); err != nil {
+		t.Fatalf("waitRetryInterval: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 35*time.Millisecond {
+		t.Fatalf("waitRetryInterval returned after %v, want >= 35ms", elapsed)
+	}
+}
+
+func TestWaitRetryIntervalPreservesCloseCause(t *testing.T) {
+	c, err := NewClient("127.0.0.1", 623, "user", "pass")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.retryInterval = time.Hour
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(net.ErrClosed)
+
+	err = c.waitRetryInterval(ctx, 1, 3)
+	if !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("err = %v, want net.ErrClosed in the chain", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled in the chain", err)
 	}
 }
 

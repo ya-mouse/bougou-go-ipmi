@@ -250,11 +250,11 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*types
 
 // SDRToSensor converts a Sensor Data Record (SDR) to a Sensor struct.
 //
-// forceScanningDisabled short-circuits the threshold/discrete reading
-// commands: the returned sensor carries the SDR metadata with
-// ScanningDisabled set, without the follow-up GetSensorReading/event calls.
-// This is the fork's force-scanning-disabled extension used by
-// ipmi-collector; pass false for the upstream behavior.
+// forceScanningDisabled short-circuits the threshold/discrete follow-up
+// calls: GetSensorReading still runs (so ScanningDisabled reflects the BMC),
+// but when the flag is set the returned sensor skips fillSensorDiscrete /
+// fillSensorThreshold. This is the fork's force-scanning-disabled extension
+// used by ipmi-collector; pass false for the upstream behavior.
 //
 // Requirements:
 //   - Only Full and Compact SDR records are supported
