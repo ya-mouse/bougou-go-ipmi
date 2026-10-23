@@ -55,9 +55,9 @@ func (c *Client) GetSensors(ctx context.Context, filterOptions ...SensorFilterOp
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.sdrToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr, false)
 		if err != nil {
-			return nil, fmt.Errorf("sdrToSensor failed, err: %w", err)
+			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
 
 		var choose bool = true
@@ -98,9 +98,9 @@ func (c *Client) GetSensorsAny(ctx context.Context, filterOptions ...SensorFilte
 	}
 
 	for _, sdr := range sdrs {
-		sensor, err := c.sdrToSensor(ctx, sdr)
+		sensor, err := c.SDRToSensor(ctx, sdr, false)
 		if err != nil {
-			return nil, fmt.Errorf("sdrToSensor failed, err: %w", err)
+			return nil, fmt.Errorf("SDRToSensor failed, err: %w", err)
 		}
 
 		var choose bool = false
@@ -143,9 +143,9 @@ func (c *Client) GetSensorsStream(ctx context.Context, filterOptions ...SensorFi
 					continue
 				}
 
-				sensor, err := c.sdrToSensor(ctx, sdr)
+				sensor, err := c.SDRToSensor(ctx, sdr, false)
 				if err != nil {
-					yield(&types.Result[types.Sensor]{Err: fmt.Errorf("sdrToSensor failed, err: %w", err)})
+					yield(&types.Result[types.Sensor]{Err: fmt.Errorf("SDRToSensor failed, err: %w", err)})
 					return
 				}
 
@@ -190,9 +190,9 @@ func (c *Client) GetSensorsAnyStream(ctx context.Context, filterOptions ...Senso
 					continue
 				}
 
-				sensor, err := c.sdrToSensor(ctx, sdr)
+				sensor, err := c.SDRToSensor(ctx, sdr, false)
 				if err != nil {
-					yield(&types.Result[types.Sensor]{Err: fmt.Errorf("sdrToSensor failed, err: %w", err)})
+					yield(&types.Result[types.Sensor]{Err: fmt.Errorf("SDRToSensor failed, err: %w", err)})
 					return
 				}
 
@@ -223,7 +223,7 @@ func (c *Client) GetSensorByID(ctx context.Context, sensorNumber uint8) (*types.
 
 	c.Debug("SDR", sdr)
 
-	sensor, err := c.sdrToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr, false)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -240,7 +240,7 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*types
 
 	c.Debug("SDR", sdr)
 
-	sensor, err := c.sdrToSensor(ctx, sdr)
+	sensor, err := c.SDRToSensor(ctx, sdr, false)
 	if err != nil {
 		return nil, fmt.Errorf("GetSensorFromSDR failed, err: %w", err)
 	}
@@ -248,7 +248,13 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*types
 	return sensor, nil
 }
 
-// sdrToSensor converts a Sensor Data Record (SDR) to a Sensor struct.
+// SDRToSensor converts a Sensor Data Record (SDR) to a Sensor struct.
+//
+// forceScanningDisabled short-circuits the threshold/discrete reading
+// commands: the returned sensor carries the SDR metadata with
+// ScanningDisabled set, without the follow-up GetSensorReading/event calls.
+// This is the fork's force-scanning-disabled extension used by
+// ipmi-collector; pass false for the upstream behavior.
 //
 // Requirements:
 //   - Only Full and Compact SDR records are supported
@@ -263,7 +269,7 @@ func (c *Client) GetSensorByName(ctx context.Context, sensorName string) (*types
 //
 // The function handles both Full and Compact SDR record types, populating
 // the appropriate fields based on the record type.
-func (c *Client) sdrToSensor(ctx context.Context, sdr *types.SDR) (*types.Sensor, error) {
+func (c *Client) SDRToSensor(ctx context.Context, sdr *types.SDR, forceScanningDisabled bool) (*types.Sensor, error) {
 	if sdr == nil {
 		return nil, fmt.Errorf("nil sdr parameter")
 	}
@@ -326,7 +332,7 @@ func (c *Client) sdrToSensor(ctx context.Context, sdr *types.SDR) (*types.Sensor
 	}
 
 	// ScanningDisabled is filled/set by fillSensorReading
-	if sensor.ScanningDisabled {
+	if sensor.ScanningDisabled || forceScanningDisabled {
 		// Sensor scanning disabled, no need to continue
 		c.Debug(fmt.Sprintf(":( Sensor [%s](%#02x) scanning disabled\n", sensor.Name, sensor.Number), "")
 		return sensor, nil
